@@ -1,0 +1,62 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+!example.tfvars
+.terraform.tfstate.lock.info
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# AWS credentials — NEVER commit these
+.aws/
+*.pem
+*.key
+aws-credentials
+
+# Vault tokens — NEVER commit
+vault-token
+.vault-token
+vault_keys.json
+
+# Kubernetes secrets
+kubeconfig
+*.kubeconfig
+kube-config
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+*.env.local
+
+# Docker
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Helm
+helm/*/charts/
+helm/*/*.tgz
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db
+awscliv2.zip
