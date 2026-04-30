@@ -31,7 +31,6 @@ module "vpc" {
 }
 
 # IAM role for EBS CSI Driver
-# NOTE: This must be a top-level block — NOT nested inside module "eks"
 module "ebs_csi_irsa_role" {
     source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
     version = "~> 5.39"
@@ -62,13 +61,12 @@ module "eks" {
     # EKS managed node group
     eks_managed_node_groups = {
         general = {
+
             instance_types = var.node_instance_types
             min_size       = var.node_min_size
             max_size       = var.node_max_size
             desired_size   = var.node_desired_size
-
-            # Spot instances for cost saving on dev workloads
-            capacity_type = "ON_DEMAND"
+            capacity_type  = "ON_DEMAND"
 
             labels = {
                 role = "general"
@@ -82,7 +80,17 @@ module "eks" {
     cluster_addons = {
         coredns    = { most_recent = true }
         kube-proxy = { most_recent = true }
-        vpc-cni    = { most_recent = true }
+
+        # Prefix delegation on vpc-cni:
+        vpc-cni = {
+            most_recent = true
+            configuration_values = jsonencode({
+                env = {
+                    ENABLE_PREFIX_DELEGATION = "true"
+                    WARM_PREFIX_TARGET       = "1"
+                }
+            })
+        }
 
         aws-ebs-csi-driver = {
             most_recent              = true
