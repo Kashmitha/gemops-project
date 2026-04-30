@@ -68,7 +68,7 @@ module "eks" {
             desired_size   = var.node_desired_size
 
             # Spot instances for cost saving on dev workloads
-            capacity_type = "SPOT"
+            capacity_type = "ON_DEMAND"
 
             labels = {
                 role = "general"

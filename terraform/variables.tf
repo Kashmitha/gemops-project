@@ -23,13 +23,9 @@ variable "cluster_version" {
 }
 
 variable "node_instance_types" {
-  description = "EC2 instance types for EKS nodes (multiple for SPOT)"
+  description = "EC2 instance types for EKS nodes"
   type        = list(string)
-
-  default = [
-    "t3.medium",
-    "t3.large"
-  ]
+  default     = ["t2.medium"]
 }
 
 variable "node_desired_size" {
