@@ -1,0 +1,160 @@
+# kube-prometheus-stack — Prometheus + Grafana + Alertmanager bundle
+# https://github.com/prometheus-community/helm-charts
+
+grafana:
+  enabled: true
+  adminPassword: "GemOps123"
+  grafana.ini:
+    server:
+      root_url: "http://localhost:3000"
+    alerting:
+      enabled: true
+
+  # Pre-configure Loki as a datasource
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki-gateway.monitoring.svc.cluster.local
+      access: proxy
+      isDefault: false
+
+  # Dashboards auto-provisioning
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: "GemOps"
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards/default
+
+prometheus:
+  prometheusSpec:
+    # Scrape interval
+    scrapeInterval: 30s
+    evaluationInterval: 30s
+    
+    # Retention
+    retention: 7d
+    retentionSize: "5GB"
+    
+    # Storage
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          resources:
+            requests:
+              storage: 10Gi
+    
+    # Watch ALL namespaces for ServiceMonitors
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp2
+          resources:
+            requests:
+              storage: 2Gi
+
+  config:
+    global:
+      resolve_timeout: 5m
+      slack_api_url: "${SLACK_WEBHOOK_URL}"
+    
+    route:
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: slack-critical
+      routes:
+        - match:
+            severity: warning
+          receiver: slack-warning
+        - match:
+            severity: critical
+          receiver: slack-critical
+    
+    receivers:
+      - name: slack-warning
+        slack_configs:
+          - channel: "#gemops-alerts"
+            title: "⚠️ WARNING: {{ .CommonLabels.alertname }}"
+            text: >-
+              *Alert:* {{ .CommonLabels.alertname }}
+              *Namespace:* {{ .CommonLabels.namespace }}
+              *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+            send_resolved: true
+      
+      - name: slack-critical
+        slack_configs:
+          - channel: "#gemops-alerts"
+            title: "🔴 CRITICAL: {{ .CommonLabels.alertname }}"
+            text: >-
+              *Alert:* {{ .CommonLabels.alertname }}
+              *Severity:* {{ .CommonLabels.severity }}
+              *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+              *Runbook:* https://github.com/Kashmitha/gemops/blob/main/docs/runbook.md
+            send_resolved: true
+
+# Custom alert rules for the Flask app
+additionalPrometheusRulesMap:
+  gemops-rules:
+    groups:
+      - name: gemops.app
+        rules:
+          # Alert: High error rate
+          - alert: GemOpsHighErrorRate
+            expr: |
+              rate(gemops_errors_total[5m]) > 0.1
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate on GemOps API"
+              description: "Error rate is {{ $value | humanize }} errors/sec. Check /simulate-error endpoint."
+          
+          # Alert: High request latency
+          - alert: GemOpsHighLatency
+            expr: |
+              histogram_quantile(0.95,
+                rate(gemops_request_duration_seconds_bucket[5m])
+              ) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "P95 latency above 500ms"
+              description: "95th percentile latency is {{ $value | humanizeDuration }}."
+          
+          # Alert: Pod not ready
+          - alert: GemOpsPodNotReady
+            expr: |
+              kube_pod_status_ready{namespace="app", condition="true"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "GemOps pod not ready"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is not ready."
+          
+          # Alert: High CPU
+          - alert: GemOpsHighCPU
+            expr: |
+              rate(container_cpu_usage_seconds_total{
+                namespace="app", container="flask-api"
+              }[5m]) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage on Flask API"
+              description: "CPU usage is {{ $value | humanizePercentage }}."
