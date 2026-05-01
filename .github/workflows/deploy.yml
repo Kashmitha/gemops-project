@@ -1,0 +1,237 @@
+name: Build, Test and Deploy
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+env:
+    AWS_REGION: ap-southeast-1
+    EKS_CLUSTER: gemops-cluster
+    IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/gemops-flask
+
+jobs:
+    # Job 1: Test
+    test:
+        name: Run Tests
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Python 3.11
+              uses: actions/setup-python@v5
+              with:
+                python-version: "3.11"
+
+            - name: Install dependencies
+              run: |
+                cd app
+                pip install -r requirements.txt
+                pip install pytest pytest-cov
+
+            - name: Run tests
+              run: |
+                cd app
+                python -m pytest tests/ -v --cov=main --cov-report=xml
+
+            - name: Lint Dockerfile
+              uses: hadolint/hadolint-action@v3.1.0
+              with:
+                dockerfile: app/Dockerfile
+
+    # Job 2: Build & Push Docker Image (SHA => Secure Hash Algorithm)
+    build:
+        name: Build & Push Image
+        needs: test
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        outputs:
+            short_sha: ${{ steps.vars.outputs.sha_short }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set short SHA
+              id: vars
+              run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+            - name: Log in to DockerHub
+              uses: docker/login-action@v3
+              with:
+                username: ${{ secrets.DOCKERHUB_USERNAME }}
+                password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+            - name: Build & push
+              uses: docker/build-push-action@v6
+              with:
+                context: ./app
+                push: true
+                tags: |
+                    ${{ env.IMAGE_NAME }}:latest
+                    ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+                cache-from: type=gha
+                cache-to: type=gha,mode=max
+
+            - name: Scan image for vulnerabilities (Trivy)
+              uses: aquasecurity/trivy-action@master
+              with:
+                image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/gemops-flask:${{ steps.vars.outputs.sha_short }}
+                format: table
+                exit-code: 1
+                ignore-unfixed: true
+                severity: CRITICAL,HIGH
+              env:
+                TRIVY_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+                TRIVY_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    # Job 3a: Terraform plan
+    terraform-plan:
+        name: Terraform Plan
+        needs: test
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws-region: ${{ env.AWS_REGION }}
+
+            - name: Setup Terraform 1.14.9
+              uses: hashicorp/setup-terraform@v3
+              with:
+                terraform_version: "1.14.9"
+
+            - name: Terraform format check
+              run: terraform fmt -check -recursive
+              working-directory: terraform
+
+            - name: Terraform Init
+              run: terraform init -input=false
+              working-directory: terraform
+
+            - name: Terraform Plan
+              run: terraform plan -out=tfplan
+              working-directory: terraform
+
+            - name: Upload plan artifact
+              uses: actions/upload-artifact@v4
+              with:
+                name: tfplan
+                path: terraform/tfplan
+
+    # Job 3b: Terraform Apply
+    terraform-apply:
+        name: Terraform Apply
+        needs: terraform-plan
+        runs-on: ubuntu-latest
+        if: github.ref == 'refs/heads/main'
+        environment: production   # Same manual approval gate as deploy
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws-region: ${{ env.AWS_REGION }}
+
+            - name: Setup Terraform 1.14.9
+              uses: hashicorp/setup-terraform@v3
+              with:
+                terraform_version: "1.14.9"
+
+            - name: Download plan artifact
+              uses: actions/download-artifact@v4
+              with:
+                name: tfplan
+                path: terraform
+
+            - name: Terraform Init
+              run: terraform init -input=false
+              working-directory: terraform
+
+            - name: Terraform Apply
+              run: terraform apply -auto-approve tfplan
+              working-directory: terraform    
+
+    # Job 4: Deploy to EKS
+    deploy:
+        name: Deploy to EKS
+        needs: [build, terraform-apply]
+        runs-on: ubuntu-latest
+        environment: production # Require manual approval in GitHub
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                aws-region: ${{ env.AWS_REGION }}
+
+            - name: Update kubeconfig
+              run: |
+                aws eks update-kubeconfig \
+                    --region ${{ env.AWS_REGION }} \
+                    --name ${{ env.EKS_CLUSTER }}
+
+            - name: Setup Helm
+              uses: azure/setup-helm@v4
+              with:
+                version: "3.17.0"
+
+            - name: Ensure app namespace exists
+              run: |
+                kubectl create namespace app --dry-run=client -o yaml | kubectl apply -f -
+
+            - name: Deploy Flask app (rolling update, zero downtime)
+              run: |
+                helm upgrade --install gemops-app ./helm/flask-app \
+                    --namespace app \
+                    --set image.tag=${{ needs.build.outputs.short_sha }} \
+                    --atomic \
+                    --wait \
+                    --timeout 5m
+
+            - name: Smoke test
+              run: |
+                kubectl rollout status deployment/gemops-app-flask \
+                  -n app --timeout=120s
+                
+                # Run curl inside the cluster using a temporary pod
+                kubectl run smoke-test \
+                  --image=curlimages/curl:latest \
+                  --restart=Never \
+                  --rm \
+                  -n app \
+                  -- curl -f http://gemops-app-flask:5000/health
+                
+                echo "Smoke test passed!"
+
+            - name: Notify Slack on success
+              if: success()
+              env:
+                SHORT_SHA: ${{ needs.build.outputs.short_sha }}
+                ACTOR: ${{ github.actor }}
+                COMMIT: ${{ github.sha }}
+              run: |
+                curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+                  -H 'Content-type: application/json' \
+                  --data "{\"text\":\"✅ GemOps deployed successfully.\n*Image:* ${{ secrets.DOCKERHUB_USERNAME }}/gemops-flask:${SHORT_SHA}\n*Commit:* ${COMMIT}\n*Author:* ${ACTOR}\"}"
+
+            - name: Notify Slack on failure
+              if: failure()
+              env:
+                SHORT_SHA: ${{ needs.build.outputs.short_sha }}
+                ACTOR: ${{ github.actor }}
+                RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+                  -H 'Content-type: application/json' \
+                  --data "{\"text\":\"❌ GemOps deployment FAILED.\n*Image attempted:* ${{ secrets.DOCKERHUB_USERNAME }}/gemops-flask:${SHORT_SHA}\n*Author:* ${ACTOR}\n*Run:* ${RUN_URL}\"}"
