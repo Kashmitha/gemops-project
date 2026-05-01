@@ -7,8 +7,6 @@ grafana:
   grafana.ini:
     server:
       root_url: "http://localhost:3000"
-    alerting:
-      enabled: true
 
   # Pre-configure Loki as a datasource
   additionalDataSources:
