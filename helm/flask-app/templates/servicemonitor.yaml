@@ -1,0 +1,17 @@
+{{- if .Values.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-flask
+  namespace: {{ .Release.Namespace }}
+  labels:
+    release: kube-prometheus-stack    # Must match Prometheus selector
+spec:
+  selector:
+    matchLabels:
+      app: flask-api
+  endpoints:
+    - port: http
+      path: {{ .Values.serviceMonitor.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}

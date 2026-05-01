@@ -1,0 +1,56 @@
+replicaCount: 3
+
+image:
+  repository: kashmitha/gemops-flask
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 5000
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 5000
+  initialDelaySeconds: 15
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 5000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+# ServiceMonitor for Prometheus Scraping
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  path: /metrics
+
+# Environment Variables Injected from Vault via Annotations
+vault:
+  enabled: true
+  role: "gemops-app"
+  secretPath: "secret/data/gemops/app"
+
+env:
+  APP_VERSION: "1.0.0"
+  LOG_LEVEL: "INFO"
