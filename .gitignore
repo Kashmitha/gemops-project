@@ -60,3 +60,7 @@ logs/
 # OS
 Thumbs.db
 awscliv2.zip
+
+# Helm
+alertmanager-secret.yaml
+alertmanager-secret.yaml
