@@ -45,3 +45,9 @@ test:
   enabled: false
 lokiCanary:
   enabled: false
+
+  chunksCache:
+  enabled: false
+
+resultsCache:
+  enabled: false

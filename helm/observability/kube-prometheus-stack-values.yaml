@@ -7,8 +7,11 @@ grafana:
   grafana.ini:
     server:
       root_url: "http://localhost:3000"
+    unified_alerting:
+      enabled: true
+    alerting:
+      enabled: false
 
-  # Pre-configure Loki as a datasource
   additionalDataSources:
     - name: Loki
       type: loki
@@ -16,7 +19,6 @@ grafana:
       access: proxy
       isDefault: false
 
-  # Dashboards auto-provisioning
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -31,15 +33,10 @@ grafana:
 
 prometheus:
   prometheusSpec:
-    # Scrape interval
     scrapeInterval: 30s
     evaluationInterval: 30s
-    
-    # Retention
     retention: 7d
     retentionSize: "5GB"
-    
-    # Storage
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -47,14 +44,11 @@ prometheus:
           resources:
             requests:
               storage: 10Gi
-    
-    # Watch ALL namespaces for ServiceMonitors
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
 
 alertmanager:
   alertmanagerSpec:
-    configSecret: alertmanager-slack-secret
     storage:
       volumeClaimTemplate:
         spec:
@@ -62,12 +56,10 @@ alertmanager:
           resources:
             requests:
               storage: 2Gi
-
   config:
     global:
       resolve_timeout: 5m
       slack_api_url: "${SLACK_WEBHOOK_URL}"
-    
     route:
       group_by: ["alertname", "namespace"]
       group_wait: 30s
@@ -75,42 +67,32 @@ alertmanager:
       repeat_interval: 4h
       receiver: slack-critical
       routes:
-        - match:
-            severity: warning
+        - matchers:
+            - severity = warning
           receiver: slack-warning
-        - match:
-            severity: critical
+        - matchers:
+            - severity = critical
           receiver: slack-critical
-    
     receivers:
       - name: slack-warning
         slack_configs:
           - channel: "#gemops-alerts"
-            title: "⚠️ WARNING: {{ .CommonLabels.alertname }}"
-            text: >-
-              *Alert:* {{ .CommonLabels.alertname }}
-              *Namespace:* {{ .CommonLabels.namespace }}
-              *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
             send_resolved: true
-      
+            title: "WARNING: {{ .CommonLabels.alertname }}"
+            text: "Alert: {{ .CommonLabels.alertname }} Namespace: {{ .CommonLabels.namespace }}"
       - name: slack-critical
         slack_configs:
           - channel: "#gemops-alerts"
-            title: "🔴 CRITICAL: {{ .CommonLabels.alertname }}"
-            text: >-
-              *Alert:* {{ .CommonLabels.alertname }}
-              *Severity:* {{ .CommonLabels.severity }}
-              *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
-              *Runbook:* https://github.com/Kashmitha/gemops/blob/main/docs/runbook.md
             send_resolved: true
+            title: "CRITICAL: {{ .CommonLabels.alertname }}"
+            text: "Alert: {{ .CommonLabels.alertname }} Severity: {{ .CommonLabels.severity }}"
+    templates: []
 
-# Custom alert rules for the Flask app
 additionalPrometheusRulesMap:
   gemops-rules:
     groups:
       - name: gemops.app
         rules:
-          # Alert: High error rate
           - alert: GemOpsHighErrorRate
             expr: |
               rate(gemops_errors_total[5m]) > 0.1
@@ -119,9 +101,8 @@ additionalPrometheusRulesMap:
               severity: critical
             annotations:
               summary: "High error rate on GemOps API"
-              description: "Error rate is {{ $value | humanize }} errors/sec. Check /simulate-error endpoint."
-          
-          # Alert: High request latency
+              description: "Error rate is {{ $value | humanize }} errors/sec."
+
           - alert: GemOpsHighLatency
             expr: |
               histogram_quantile(0.95,
@@ -133,8 +114,7 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "P95 latency above 500ms"
               description: "95th percentile latency is {{ $value | humanizeDuration }}."
-          
-          # Alert: Pod not ready
+
           - alert: GemOpsPodNotReady
             expr: |
               kube_pod_status_ready{namespace="app", condition="true"} == 0
@@ -144,8 +124,7 @@ additionalPrometheusRulesMap:
             annotations:
               summary: "GemOps pod not ready"
               description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is not ready."
-          
-          # Alert: High CPU
+
           - alert: GemOpsHighCPU
             expr: |
               rate(container_cpu_usage_seconds_total{
