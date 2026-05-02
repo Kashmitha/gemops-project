@@ -116,12 +116,12 @@ jobs:
               run: terraform fmt -check -recursive
               working-directory: terraform
 
+            - name: Get AWS Account ID
+              id: account
+              run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
             - name: Terraform Init
-              run: |
-                terraform init -input=false \
-                  -backend-config="bucket=gemops-tfstate-$(aws sts get-caller-identity --query Account --output text)" \
-                  -backend-config="region=ap-southeast-1" \
-                  -backend-config="dynamodb_table=gemops-tfstate-lock"
+              run: terraform init -input=false -reconfigure -backend-config="bucket=gemops-tfstate-${{ steps.account.outputs.id }}" -backend-config="region=ap-southeast-1" -backend-config="dynamodb_table=gemops-tfstate-lock"
               working-directory: terraform
 
             - name: Terraform Plan
@@ -162,11 +162,12 @@ jobs:
                 name: tfplan
                 path: terraform
 
+            - name: Get AWS Account ID
+              id: account
+              run: echo "id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
+
             - name: Terraform Init
-              run: terraform init -input=false -reconfigure \
-                -backend-config="bucket=gemops-tfstate-$(aws sts get-caller-identity --query Account --output text)" \
-                -backend-config="region=ap-southeast-1" \
-                -backend-config="dynamodb_table=gemops-tfstate-lock"
+              run: terraform init -input=false -reconfigure -backend-config="bucket=gemops-tfstate-${{ steps.account.outputs.id }}" -backend-config="region=ap-southeast-1" -backend-config="dynamodb_table=gemops-tfstate-lock"
               working-directory: terraform
 
             - name: Terraform Apply
