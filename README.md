@@ -256,8 +256,8 @@ helm install kube-prometheus-stack \
   -f helm/observability/kube-prometheus-stack-values.yaml
 
 # Build and push application image
-docker build -t YOUR_DOCKERHUB_USERNAME/gemops-flask:1.0.0 ./app
-docker push YOUR_DOCKERHUB_USERNAME/gemops-flask:1.0.0
+docker build -t kashmitha/gemops-flask:1.0.0 ./app
+docker push kashmitha/gemops-flask:1.0.0
 
 # Create app secrets
 kubectl create secret generic gemops-app-secrets -n app \
@@ -267,7 +267,7 @@ kubectl create secret generic gemops-app-secrets -n app \
 # Deploy Flask application
 helm install gemops-app ./helm/flask-app \
   --namespace app \
-  --set image.repository=YOUR_DOCKERHUB_USERNAME/gemops-flask \
+  --set image.repository=kashmitha/gemops-flask \
   --set image.tag=1.0.0
 
 kubectl set env deployment/gemops-app-flask -n app \
