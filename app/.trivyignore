@@ -1,0 +1,5 @@
+# Trivy ignore file
+# Add specific CVE IDs here if they are false positives
+# or have no fix available and are accepted risks
+# Format: CVE-YYYY-XXXXX
+# Example: CVE-2023-12345
