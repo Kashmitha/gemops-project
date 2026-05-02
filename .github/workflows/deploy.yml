@@ -80,7 +80,7 @@ jobs:
                 cache-to: type=gha,mode=max
 
             - name: Scan image for vulnerabilities (Trivy)
-              uses: aquasecurity/trivy-action@0.30.0
+              uses: aquasecurity/trivy-action@v0.36.0
               with:
                 image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/gemops-flask:${{ steps.vars.outputs.sha_short }}
                 format: table
