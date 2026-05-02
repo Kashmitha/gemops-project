@@ -1,3 +1,4 @@
+# NEVER put real Slack webhook here. Inject via: kubectl create secret
 # kube-prometheus-stack — Prometheus + Grafana + Alertmanager bundle
 # https://github.com/prometheus-community/helm-charts
 
