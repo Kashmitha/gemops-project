@@ -218,15 +218,28 @@ jobs:
               run: |
                 kubectl rollout status deployment/gemops-app-flask \
                   -n app --timeout=120s
-                
-                # Run curl inside the cluster using a temporary pod
+
+                # Run curl inside cluster and wait for completion
                 kubectl run smoke-test \
                   --image=curlimages/curl:latest \
                   --restart=Never \
-                  --rm \
                   -n app \
                   -- curl -f http://gemops-app-flask:5000/health
-                
+
+                # Wait for the pod to complete
+                kubectl wait pod/smoke-test \
+                  --for=condition=Ready \
+                  -n app \
+                  --timeout=30s || true
+
+                kubectl wait pod/smoke-test \
+                  --for=jsonpath='{.status.phase}'=Succeeded \
+                  -n app \
+                  --timeout=60s
+
+                # Clean up manually
+                kubectl delete pod smoke-test -n app --ignore-not-found
+
                 echo "Smoke test passed!"
 
             - name: Notify Slack on success
