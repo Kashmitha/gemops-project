@@ -32,49 +32,49 @@ A Python Flask API serves as the application layer, instrumented with custom Pro
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Developer Workstation                             │
+│                    Developer Workstation                            │
 │                    Ubuntu 24.04 (VirtualBox)                        │
 └─────────────────────┬───────────────────────────────────────────────┘
                       │ git push
                       ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       GitHub Actions Pipeline                        │
+│                       GitHub Actions Pipeline                       │
 │                                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
-│  │  Test    │  │  Build   │  │Terraform │  │  Deploy to EKS   │   │
-│  │  pytest  │→ │  Docker  │  │  Plan +  │→ │  Helm upgrade    │   │
-│  │  hadolint│  │  Trivy   │  │  Apply   │  │  Smoke test      │   │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐     │
+│  │  Test    │  │  Build   │  │Terraform │  │  Deploy to EKS   │     │
+│  │  pytest  │→ │  Docker  │  │  Plan +  │→ │  Helm upgrade    │     │
+│  │  hadolint│  │  Trivy   │  │  Apply   │  │  Smoke test      │     │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘     │
 └─────────────────────┬───────────────────────────────────────────────┘
                       │ terraform apply + helm upgrade
                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────────────────────┐
 │                    AWS (ap-southeast-1)                              │
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  VPC  10.0.0.0/16                                           │   │
-│  │                                                             │   │
-│  │  Public Subnets          Private Subnets                    │   │
-│  │  10.0.101.0/24           10.0.1.0/24  ┌─────────────────┐  │   │
-│  │  10.0.102.0/24           10.0.2.0/24  │  EKS 1.32       │  │   │
-│  │       │                               │                  │  │   │
-│  │  NAT Gateway             ┌────────────┤  namespace: app  │  │   │
-│  │  (single)                │            │  Flask API x2-6  │  │   │
-│  │                          │            │  HPA enabled     │  │   │
-│  │                          │            ├──────────────────┤  │   │
-│  │                          │            │ namespace:       │  │   │
-│  │                          │            │ monitoring       │  │   │
-│  │                          │            │ Prometheus       │  │   │
-│  │                          │            │ Grafana 13       │  │   │
-│  │                          │            │ Loki 3.7.1       │  │   │
-│  │                          │            │ Alloy 1.7        │  │   │
-│  │                          │            │ Alertmanager     │  │   │
-│  │                          │            ├──────────────────┤  │   │
-│  │                          │            │ namespace: vault │  │   │
-│  │  S3 (tfstate) ───────────┘            │ Vault 2.0       │  │   │
-│  │  DynamoDB (lock)                      └─────────────────┘  │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+│                                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐     │
+│  │  VPC  10.0.0.0/16                                           │     │
+│  │                                                             │     │
+│  │  Public Subnets          Private Subnets                    │     │
+│  │  10.0.101.0/24           10.0.1.0/24  ┌──────────────────┐  │     │
+│  │  10.0.102.0/24           10.0.2.0/24  │  EKS 1.32        │  │     │
+│  │       │                               │                  │  │     │
+│  │  NAT Gateway             ┌────────────┤  namespace: app  │  │     │
+│  │  (single)                │            │  Flask API x2-6  │  │     │
+│  │                          │            │  HPA enabled     │  │     │
+│  │                          │            ├──────────────────┤  │     │
+│  │                          │            │ namespace:       │  │     │
+│  │                          │            │ monitoring       │  │     │
+│  │                          │            │ Prometheus       │  │     │ 
+│  │                          │            │ Grafana 13       │  │     │
+│  │                          │            │ Loki 3.7.1       │  │     │
+│  │                          │            │ Alloy 1.7        │  │     │
+│  │                          │            │ Alertmanager     │  │     │
+│  │                          │            ├──────────────────┤  │     │
+│  │                          │            │ namespace: vault │  │     │
+│  │  S3 (tfstate) ───────────┘            │ Vault 2.0        │  │     │
+│  │  DynamoDB (lock)                      └──────────────────┘  │     │
+│  └─────────────────────────────────────────────────────────────┘     │
+└──────────────────────────────────────────────────────────────────────┘
                       │ alerts
                       ▼
               Slack #gemops-alerts
@@ -506,7 +506,7 @@ kubectl rollout status deployment/gemops-app-flask -n app
 
 **Kashmitha Madushan**  
 Computer Science Undergraduate — Eastern University Sri Lanka, Trincomalee Campus  
-Student ID: 21/COM/505
+Student ID: EUSL/TC/IS/2021/COM/53
 
 [![GitHub](https://img.shields.io/badge/GitHub-Kashmitha-181717?logo=github)](https://github.com/Kashmitha)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Kashmitha_Madushan-0A66C2?logo=linkedin)](https://www.linkedin.com/in/kashmitha-madushan-362822339/)
